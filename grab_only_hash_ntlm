@@ -1,0 +1,11 @@
+#! /bin/sh
+
+touch hash.txt
+
+while IFS= read -r row; do
+hash=$(echo $row | cut -d ":" -f 4)
+echo $hash >> hash.txt
+done < $1
+
+
+
