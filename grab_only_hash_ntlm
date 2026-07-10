@@ -1,11 +1,54 @@
-#! /bin/sh
+#!/bin/bash
 
-touch hash.txt
+# grab_only_hash_ntlm — Improved Version
+# Extract NTLM hashes from secretsdump output
+# Usage: ./grab_only_hash_ntlm <raw_hash_file> [hashcat|john|all]
+
+INPUT="${1:-.}"
+FORMAT="${2:-all}"
+
+echo "[*] Creating hash files..."
+rm -f hash.txt hash_hashcat.txt hash_john.txt
+touch hash.txt hash_hashcat.txt hash_john.txt
+
+HASH_COUNT=0
 
 while IFS= read -r row; do
-hash=$(echo $row | cut -d ":" -f 4)
-echo $hash >> hash.txt
-done < $1
+    [[ -z "$row" ]] && continue
 
+    USERNAME=$(echo "$row" | cut -d ":" -f 1)
+    HASH=$(echo "$row" | cut -d ":" -f 4)
 
+    # Vérifie si c'est bien un hash MD5/NTLM valide (32 caractères hexa)
+    if [[ "$HASH" =~ ^[a-fA-F0-9]{32}$ ]]; then
+        echo "$HASH" >> hash.txt
+        echo "${USERNAME}:${HASH}" >> hash_hashcat.txt
+        echo "${USERNAME}:${HASH}" >> hash_john.txt
+        HASH_COUNT=$((HASH_COUNT + 1))
+    fi
+done < "$INPUT"
 
+echo "[✓] Extracted $HASH_COUNT hashes"
+echo
+
+if [ "$FORMAT" = "all" ] || [ "$FORMAT" = "list" ]; then
+    echo "📁 Generated files:"
+    echo "  • hash.txt (brut)"
+    echo "  • hash_hashcat.txt (username:hash)"
+    echo "  • hash_john.txt (john format)"
+    echo
+fi
+
+if [ "$FORMAT" = "all" ] || [ "$FORMAT" = "hashcat" ]; then
+    echo "🔓 HASHCAT:"
+    echo "  hashcat -m 1000 -w 3 -O --username hash_hashcat.txt \$WORDLIST"
+    echo "  hashcat -m 1000 --username hash_hashcat.txt --show"
+    echo
+fi
+
+if [ "$FORMAT" = "all" ] || [ "$FORMAT" = "john" ]; then
+    echo "🔓 JOHN:"
+    echo "  john --format=nt --wordlist=\$WORDLIST hash_john.txt"
+    echo "  john --format=nt --show hash_john.txt"
+    echo
+fi
