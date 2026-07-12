@@ -1,8 +1,28 @@
 #!/bin/bash
 
 # grab_only_hash_ntlm — Improved Version
-# Extract NTLM hashes from secretsdump output
+# Extract NTLM hashes from secretsdump / nxc ntdsutil output
+# Supports:
+#   - secretsdump format: username:uid:LM:NTLM:::
+#   - nxc ntdsutil output (with NTDSUTIL prefix): NTDSUTIL ... username:uid:LM:NTLM:::
 # Usage: ./grab_only_hash_ntlm <raw_hash_file> [hashcat|john|all]
+
+# Clean line by removing nxc/ntdsutil prefixes (e.g., "NTDSUTIL IP PORT DC ")
+# Returns the clean hash line: username:uid:LM:NTLM:::
+clean_hash_line() {
+    local line="$1"
+
+    # Look for the pattern: username (with optional domain\) followed by :uid:LM:NTLM:::
+    # This regex finds: optional(word+\) + word+ + :digits+ + :32hexchars: + :32hexchars: + :::
+    if [[ "$line" =~ (([^\\[:space:]:]+\\)?[^\\[:space:]:]+):[0-9]+:[a-fA-F0-9]{32}:[a-fA-F0-9]{32}::: ]]; then
+        local hash_part="${BASH_REMATCH[0]}"
+        # Remove trailing spaces if any
+        echo "${hash_part% }"
+    else
+        # No valid pattern found, return as-is
+        echo "$line"
+    fi
+}
 
 INPUT="${1:-.}"
 FORMAT="${2:-all}"
@@ -15,6 +35,9 @@ HASH_COUNT=0
 
 while IFS= read -r row; do
     [[ -z "$row" ]] && continue
+
+    # Clean line (remove nxc/ntdsutil prefixes if present)
+    row=$(clean_hash_line "$row")
 
     USERNAME=$(echo "$row" | cut -d ":" -f 1)
     HASH=$(echo "$row" | cut -d ":" -f 4)
